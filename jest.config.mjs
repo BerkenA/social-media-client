@@ -1,7 +1,7 @@
 /** @type {import('jest').Config} */
 const config = {
     verbose: true,
-    testEnvironment: 'node',
+    testEnvironment: 'jsdom', // Change from 'node' to 'jsdom'
     transform: {
         '^.+\\.js$': 'babel-jest',
     },

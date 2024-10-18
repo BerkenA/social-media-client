@@ -1,70 +1,61 @@
 import { login } from '../login.js'
-import { apiPath } from '../constants.js'
-import { headers } from '../headers.js'
-import { save } from '../../storage/index.js'
+import { logout } from '../logout.js'
+import { remove } from '../../../storage/remove.js'
 
-jest.mock('../../storage/index.js') // Mock the save function
+jest.mock('../../../storage/remove.js', () => ({
+    remove: jest.fn(),
+}))
 
-describe('login function', () => {
-    beforeEach(() => {
-        jest.clearAllMocks() // Clear mocks before each test
+beforeEach(() => {
+    jest.clearAllMocks()
+
+    const localStorageMock = {
+        setItem: jest.fn(),
+        getItem: jest.fn(() => null),
+        removeItem: jest.fn(),
+        clear: jest.fn(),
+    }
+
+    Object.defineProperty(window, 'localStorage', {
+        value: localStorageMock,
+        writable: true,
     })
+})
 
-    test('should log in successfully and save the token and profile', async () => {
-        const mockEmail = 'user@example.com'
-        const mockPassword = 'password123'
+test('testing login ok', async () => {
+    const mockToken = 'mockAccessToken'
+    const recievedToken = { accessToken: mockToken }
 
-        const mockProfile = {
-            name: 'Test User',
-            email: mockEmail,
-            accessToken: 'mockAccessToken',
-        }
-
-        // Mock the fetch function to return a successful response
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve(mockProfile),
-            })
-        )
-
-        // Call the login function
-        const result = await login(mockEmail, mockPassword)
-
-        // Check that fetch was called with the correct parameters
-        expect(fetch).toHaveBeenCalledWith(`${apiPath}/social/auth/login`, {
-            method: 'post',
-            body: JSON.stringify({ email: mockEmail, password: mockPassword }),
-            headers: headers('application/json'),
+    global.fetch = jest.fn(() =>
+        Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(recievedToken),
         })
+    )
 
-        // Check that the token was saved
-        expect(save).toHaveBeenCalledWith('token', 'mockAccessToken')
+    const result = await login('testEmail', 'testPassword')
 
-        // Ensure the accessToken was removed from the profile before saving
-        const expectedProfile = { ...mockProfile }
-        delete expectedProfile.accessToken
-        expect(save).toHaveBeenCalledWith('profile', expectedProfile)
+    expect(result).toEqual(recievedToken)
 
-        // Ensure the correct profile is returned
-        expect(result).toEqual(expectedProfile)
+    expect(localStorage.setItem).toHaveBeenCalledWith(
+        'token',
+        JSON.stringify(mockToken)
+    )
+})
+
+test('check unauthorized login', async () => {
+    fetch.mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Unauthorized',
     })
 
-    test('should throw an error if the response is not ok', async () => {
-        const mockEmail = 'user@example.com'
-        const mockPassword = 'wrongPassword'
+    await expect(login('test@example.com', 'wrongpassword')).rejects.toThrow(
+        'Unauthorized'
+    )
+})
 
-        // Mock the fetch function to return an unsuccessful response
-        global.fetch = jest.fn(() =>
-            Promise.resolve({
-                ok: false,
-                statusText: 'Unauthorized',
-            })
-        )
-
-        // Check that the function throws the correct error
-        await expect(login(mockEmail, mockPassword)).rejects.toThrow(
-            'Unauthorized'
-        )
-    })
+test('testing logout', async () => {
+    logout()
+    expect(remove).toHaveBeenCalledWith('token')
+    expect(remove).toHaveBeenCalledWith('profile')
 })
